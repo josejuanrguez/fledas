@@ -1,0 +1,133 @@
+#!/bin/bash
+
+scriptname=$(basename "$0")
+
+# If you don't use option -l, this will be the default.
+DEFAULTLOGDIRECTORY=/dev/null
+# Name of the logfile logfile.
+LOGFILE="$scriptname"
+
+Help()
+{
+   echo -e "\nUsage: $0 -s seconds -u -l logfile."
+   echo -e "\t-s Sleep interval. The daemon will run every -s seconds. If missing, 5 will be the default."
+   echo -e "\t-u Undaemonize."
+   echo -e "\t-l Directory path to log file. If none, $DEFAULTLOGDIRECTORY will be used instead.\n"
+   echo -e "Examples: $0 -s 5             Execute the daemon every 5 seconds"
+   echo -e "          $0 -l /home/user    Save logfiles $0 and $0.err in /home/user"
+   echo -e "          $0 -u               Removes the daemon from memory\n"
+   exit 1
+}
+
+if [ $# -eq 0 ]; then
+    echo "Flexible Daemon Script v1.00.-"
+    echo "Sorry, no arguments provided"
+    echo "Please, provide at least one argument"
+    Help
+    exit 1
+fi
+
+while [ -n "$1" ]
+do
+case "$1" in
+   -h) Help
+       shift ;;
+
+   -l) LOGDIRECTORY="$2"
+       ERRLOGDIRECTORY="$2".err
+       touch "$LOGDIRECTORY/$LOGFILE" 2> /dev/null
+       if [[ $? -ne 0 || -z $2 ]]
+       then
+          echo -e "\nUnable to create logfile. * Using /dev/null instead *"
+          echo " -> Missing -l parameter"
+          echo " -> You don't have permission to create that file"
+          echo " -> Wrong -l parameter"
+          echo " -> You must enter ONLY a directory path"
+          LOGDIRECTORY=$DEFAULTLOGDIRECTORY
+          ERRLOGDIRECTORY=$DEFAULTLOGDIRECTORY
+       else
+          LOGDIRECTORY=$LOGDIRECTORY/$LOGFILE
+          ERRLOGDIRECTORY=$LOGDIRECTORY/$LOGFILE.err
+       fi
+       shift
+       ;;
+
+   -s) # Check if sleep parameter is a number.
+       sleep="$2"
+       case $sleep in
+         ''|*[!0-9]*) echo -e "\n-> Check sleep interval"
+                      Help ;;
+         *) ;;
+       esac
+       shift ;;
+
+   -u) # Check if our daemon is running.
+       # At this point, if our daemon exists there are two "daemon's" copies
+       # running in the system memory: the daemon and the one you called
+       # to uninstall it. We have to have a way to distinguish between them.
+       # We know that only our daemon has PPID = 1 (its parent process is init)
+       # so we check & kill it.
+
+       if pgrep -P 1 "$scriptname" > /dev/null;
+       then
+          # It exists! You are going to die!!! Muahahahaha!
+          # It isn't a good day to die today?!
+          PID=$(pgrep -P 1 "$scriptname")
+          echo -e "Found with PID $PID. Sending SIGTERM signal.\n"
+          kill "$PID"
+          exit 0
+       else
+          # Ohhh no! What happened? I would wanted to kill you today... :(
+          echo -e "\n$0 isn't running.\n"
+          exit 1
+       fi
+       ;;
+
+    --) Help
+       shift
+       break ;;
+
+    *) echo -e "\nSorry, $1 is not an option"
+       Help ;;
+esac
+shift
+done
+
+# Maybe the user didn't enter a value for sleep.
+# In this case, we set sleep to 5 to prevent
+# system sluggish.
+
+if [ -z "$LOGDIRECTORY" ]; then
+    echo -e "-l logfile wasn't defined. Assuming /dev/null by default.\n"
+    LOGDIRECTORY=/dev/null
+    ERRLOGDIRECTORY=/dev/null
+fi
+
+if [ -z "$sleep" ]; then
+    echo -e "\nSleep wasn't defined. Assuming 5 by default.\n"
+    sleep=5;
+fi
+
+function daemon_code
+{
+
+# WARNING: infinite loop ahead. This is the code than will run as a daemon.
+#
+# Be careful: check carefully what you do write between the while - done loop.
+# Use the highest sleep number to acomplish your task, try the script in a
+# non-production machine and check load average and memory consumption while
+# it is running. Try to code in a efficient way and double check everything.
+
+  while :; do
+
+      if pidof yes > /dev/null
+      then
+        kill "$(pidof yes)"
+      fi
+      sleep "$sleep"
+
+  done
+}
+
+daemon_code </dev/null >> "$LOGDIRECTORY" 2>> "$ERRLOGDIRECTORY" &
+disown
